@@ -15,8 +15,14 @@ with subprocess.Popen(command, stdout=subprocess.PIPE, stdin=subprocess.PIPE, bu
 
     for line in iter(p.stdout.readline, b''):
         print(str(line, 'utf-8').strip('\n'))
-        send("abc")
-        time.sleep(1)
+        #time.sleep(0.1)
+
+        if line.__contains__(b"Command Line Interface initialized"):
+            #time.sleep(1)
+            send("add abcd")
+
+        if line.__contains__(b"main input error"):
+            send("stop")
 
 
         
