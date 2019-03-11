@@ -4,8 +4,9 @@
 import asyncio
 import websockets
 import time
+import random
 
-process = "vlc process one day"
+enable_websockets = True
 
 async def read_stream(stream, cb):  
     while True:
@@ -15,15 +16,16 @@ async def read_stream(stream, cb):
         else:
             break  
 
-async def monitor_vlc():
+async def main():
     command = ["script", "-c cvlc --control cli"]
+    #command = ["script", "-c cvlc --control cli --video-wallpaper"]
 
-    process = await asyncio.create_subprocess_exec(*command,
-            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, stdin=asyncio.subprocess.PIPE)
+    vlc_process = await asyncio.create_subprocess_exec(*command, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, stdin=asyncio.subprocess.PIPE)
+    print(vlc_process)
 
     def send_command(command):
         print("Sending command: "+ command)
-        process.stdin.write(bytes(command, 'utf-8') + b'\n')
+        vlc_process.stdin.write(bytes(command, 'utf-8') + b'\n')
 
     def handle_output(output_raw):
         output = str(output_raw, "utf-8").strip('\n')
@@ -31,38 +33,73 @@ async def monitor_vlc():
         print(output)
 
         #auto-stop
-        if output.__contains__("main input error"):
+        if output.__contains__("error"):
             send_command("stop")
 
         #test auto-stop
+        #if output.__contains__("initialized"):
+        #    time.sleep(2)
+        #    send_command("add a")
+
         if output.__contains__("initialized"):
             time.sleep(2)
-            send_command("add a")
+            #send_command("add https://www.youtube.com/watch?v=krLYZmPRtnc")
 
+    async def random_commands():
+        commands = [
+            "add file:///home/paul/Videos/clown pepe.webm", 
+            "add file:///home/paul/Collections/Funny Content/hard knock life.webm", 
+            "add file:///home/paul/Videos/webm/AAAA.webm", 
+            "add file:///home/paul/Videos/webm/cat gone.webm",
+            "add file:///home/paul/Collections/Funny Content/thhhhhh.webm", 
+            "add file:///home/paul/Collections/Funny Content/power lifter.webm", 
+            "add BABABABABABABABABABABBABABAABABBBABBABABBBABBABBABABABABKFJHAKJHKASDHKASDASDLBAYFAKFIAUFEIUFAIUFH,AHEFB,KEHFGYASDGTYKGFAGJEFHJEFRKLIUHLAEAEGRFLBFABFRLHYAFRHAGERFJHVAWEVAKYUAWEVFKUV",
+            "add https://www.youtube.com/watch?v=krLYZmPRtnc" ,
+            "add BABABABABABABABABABABBABABAABABBBABBABABBBABBABBABABABABKFJHAKJHKASDHKASDASDLBAYFAKFIAUFEIUFAIUFH,AHEFB,KEHFGYASDGTYKGFAGJEFHJEFRKLIUHLAEAEGRFLBFABFRLHYAFRHAGERFJHVAWEVAKYUAWEVFKUV",
+        ]
+        while True:
+            send_command(random.choice(commands))
+            await asyncio.sleep(3)
 
-    await asyncio.wait([
+    async def other():
+        while True:
+            #print("async as fuck")
+            await asyncio.sleep(0.3)
+
         #read_stream(process.stdout, lambda x: print("STDOUT: %s" % x)),
-        read_stream(process.stdout, handle_output),
-        read_stream(process.stderr, lambda x: print("STDERR: %s" % x))
-    ])
+    
+    async def handle_websocket(websocket, path):
+        async for message in websocket:
+            if message.startswith("#"): 
+                message = message[1:]
+                send_command(message)
+                await websocket.send(message)
 
-    return await process.wait()
 
-
-async def other():
-    while True:
-        print("henlo")
-        await asyncio.sleep(10)
-
-if __name__ == '__main__':
-
-    #command = ["./slowprogram.sh"]
-    #command = ["./echo.sh"]
-
-    loop = asyncio.get_event_loop()
-
-    loop.create_task(monitor_vlc())
     loop.create_task(other())
 
-    loop.run_forever()
-    loop.close()
+    #loop.create_task(random_commands())
+
+    handle_stdout = loop.create_task(read_stream(vlc_process.stdout, handle_output))
+    handle_stderr = loop.create_task(read_stream(vlc_process.stderr, lambda x: print("STDERR: %s" % x)))
+
+    if enable_websockets: 
+        def get_port():
+            import socket
+            tcp = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            tcp.bind(('', 0))
+            addr, port = tcp.getsockname()
+            tcp.close()
+            return 5894
+            return port
+
+        port = get_port()
+        loop.create_task(await websockets.serve(handle_websocket, 'localhost', port))
+        print("Websocket interface listening on port "+str(port))
+
+    await asyncio.wait([handle_stderr, handle_stdout])
+
+
+if __name__ == '__main__':
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(main())
